@@ -1,0 +1,48 @@
+PORT = 1337
+
+All coordinates are zero-based, starting in the left-top
+
+
+start:
+	host -> client: "multisweeper v1\n"
+	{
+		path 1: client -> host: "multisweeper client v1\n"
+		        client -> host: "name " <nickname of the user> "\n"
+
+		path 2: client -> host: "multisweeper client v1 ping\n"
+		        host -> client: "multisweeper pong\n"
+		        connection close.
+	}
+
+begin game: [variables: [W](width of board) [H](height of board) [N](number of bombs) [P](number of players)]
+	host -> client: "num_players [P]\n"
+	([P] times:) host -> client: "player " <nickname of one of the other players> "\n"
+	host -> client: "start [W] [H] [N]\n"
+
+your turn: [variables: [x](x coordinate of click) [y](y coordinate of click)]
+	host -> client: "turn_start\n"
+	client -> host: "click [x] [y]\n"
+
+board update:
+	host -> client: "board_update " <[W]*[H] integers describing the new board: 0-8=number in cell, 9=unknown, 10=bomb (only in last board_update of a round)> "\n"
+
+turn id update:
+	host -> client: "turn_id_update " <current turn id; first turn is id 1> "\n"
+	(at this time it is possible that a [roulette start:] sequence is started)
+
+end condition:
+	host -> client: "end_condition " <2 if you've won the competition, 1 if you're through to the next round, 0 if you've lost> "\n"
+	[if you got a 1, you can now expect a [begin game:] sequence; the start of the next round]
+
+sudden exit:
+	host -> client: "sudden_exit\n"
+	connection close.
+
+
+At the start of the game, the [start:] sequence is started, followed by [begin game:].
+Then, at the start of a new turn, everybody receives a [turn id update:], and the player to play gets a [your turn:] request.
+After that, a [board update:] sequence is sent to everybody, after which a new turn starts.
+
+If, at some point, someone clicks a mine, everybody receives a [board update:] with 10's at the right places and the right [end condition:]. If a player loses, he gets promoted to spectator status and gets all applicable [begin game:]'s, [turn id update:]'s and [board update:]'s, and a [sudden exit:] when the entire game finishes. Then, for all remaining players, a new [begin game:] announces the beginning of the next round; unless the last round was already with two players, in which case the winner gets a "2" in the [end condition:], the other player a "1" in the [end condition:] and the spectators a [sudden exit:], and all connections are closed.
+
+If, at some point, a protocol is violated, or the game otherwise has to suddenly terminate, a [sudden exit:] is sent to everybody and all connections are closed.
